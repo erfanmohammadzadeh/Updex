@@ -16,7 +16,6 @@ SOURCES += \
     src/infrastructure/GitHubReleaseRepository.cpp \
     src/infrastructure/GitHubRepoParser.cpp \
     src/infrastructure/JsonSettingsStore.cpp \
-    src/infrastructure/WinHttpClient.cpp \
     src/infrastructure/WindowsApplicationProbe.cpp \
     src/infrastructure/ZipPackageInstaller.cpp \
     src/presentation/UpdateController.cpp \
@@ -42,8 +41,8 @@ HEADERS += \
     src/infrastructure/GitHubReleaseRepository.h \
     src/infrastructure/GitHubRepoParser.h \
     src/infrastructure/JsonSettingsStore.h \
+    src/infrastructure/HttpClient.h \
     src/infrastructure/TextConvert.h \
-    src/infrastructure/WinHttpClient.h \
     src/infrastructure/WindowsApplicationProbe.h \
     src/infrastructure/ZipPackageInstaller.h \
     src/presentation/UpdateController.h \
@@ -56,8 +55,17 @@ FORMS += \
 RESOURCES += \
     Resource.qrc
 
-win32:RC_FILE += Updex.rc
-win32:LIBS += -lwinhttp -lversion
+win32 {
+    RC_FILE += Updex.rc
+    LIBS += -lwinhttp -lversion
+    DEFINES += UPDEX_OS_WINDOWS
+    SOURCES += src/infrastructure/WinHttpClient.cpp
+}
+
+unix:!android {
+    QT += network
+    SOURCES += src/infrastructure/QtNetworkClient.cpp
+}
 
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin

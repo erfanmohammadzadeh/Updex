@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>560</width>
-    <height>520</height>
+    <height>560</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -37,7 +37,7 @@
        <item row="0" column="1">
         <widget class="QLineEdit" name="lineEditAppExePath">
          <property name="placeholderText">
-          <string>Program.exe</string>
+          <string>Program</string>
          </property>
         </widget>
        </item>
@@ -115,6 +115,57 @@
           <string>-</string>
          </property>
         </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QCheckBox" name="checkBoxSchedule">
+         <property name="text">
+          <string>Check every</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <layout class="QHBoxLayout" name="horizontalLayoutSchedule">
+         <item>
+          <widget class="QSpinBox" name="spinBoxCheckEvery">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>30</number>
+           </property>
+           <property name="value">
+            <number>1</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="comboBoxCheckUnit">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <item>
+            <property name="text">
+             <string>Day</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Week</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelNextCheckValue">
+           <property name="text">
+            <string>Off</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
       </layout>
      </widget>

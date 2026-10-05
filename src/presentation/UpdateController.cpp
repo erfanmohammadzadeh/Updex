@@ -4,12 +4,34 @@
 #include "presentation/mainwindow.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QPointer>
 #include <QtConcurrent>
+
+namespace
+{
+qint64 scheduleIntervalMs(const UpdaterSettings &settings)
+{
+    const qint64 dayMs = 24LL * 60 * 60 * 1000;
+    const int count = settings.checkEvery < 1 ? 1 : settings.checkEvery;
+    if (settings.checkUnit == "week")
+        return count * 7 * dayMs;
+    return count * dayMs;
+}
+
+QString schedulePhrase(const UpdaterSettings &settings)
+{
+    const int count = settings.checkEvery < 1 ? 1 : settings.checkEvery;
+    const bool week = settings.checkUnit == "week";
+    if (count == 1)
+        return week ? QStringLiteral("every week") : QStringLiteral("every day");
+    return QStringLiteral("every %1 %2").arg(count).arg(week ? QStringLiteral("weeks") : QStringLiteral("days"));
+}
+}
 
 UpdateController::UpdateController(UpdateModel &model,
                                    CheckForUpdate &checkForUpdate,
@@ -25,7 +47,10 @@ UpdateController::UpdateController(UpdateModel &model,
     , m_store(settingsStore)
     , m_discovery(discovery)
     , m_probe(probe)
+    , m_scheduleTimer(this)
 {
+    m_scheduleTimer.setSingleShot(true);
+    connect(&m_scheduleTimer, &QTimer::timeout, this, &UpdateController::onScheduledCheck);
 }
 
 void UpdateController::attach(MainWindow *window)
@@ -61,9 +86,18 @@ void UpdateController::start()
     m_model.setAppPath(QString::fromStdString(m_settings.targetExecutable));
     m_model.setRepository(QString::fromStdString(m_settings.repositoryUrl));
     m_model.setToken(QString::fromStdString(m_settings.token));
+    m_model.setScheduleEnabled(m_settings.scheduleEnabled);
+    m_model.setCheckEvery(m_settings.checkEvery);
+    m_model.setCheckUnit(QString::fromStdString(m_settings.checkUnit));
     refreshInstalledVersion();
+    armSchedule();
     m_model.appendLog(QStringLiteral("Config: %1").arg(QString::fromStdString(m_store.filePath())));
-    m_model.appendLog(QStringLiteral("Set the GitHub repository that publishes releases, then check for an update."));
+    if (m_settings.scheduleEnabled) {
+        m_model.appendLog(QStringLiteral("Scheduled check %1. %2")
+                              .arg(schedulePhrase(m_settings), m_model.nextCheck()));
+    } else {
+        m_model.appendLog(QStringLiteral("Set the GitHub repository that publishes releases, then check for an update."));
+    }
     m_model.setStatus(QStringLiteral("Ready"));
 }
 
@@ -82,29 +116,78 @@ void UpdateController::onUpdate()
         confirmAndInstall();
 }
 
-void UpdateController::onSettingsEdited(const QString &appPath, const QString &repository, const QString &token)
+void UpdateController::onSettingsEdited(const QString &appPath, const QString &repository, const QString &token, bool scheduleEnabled, int checkEvery, const QString &checkUnit)
 {
     if (m_model.busy())
         return;
 
+    const std::string unit = checkUnit == QStringLiteral("week") ? "week" : "day";
+    const int maxCount = unit == "week" ? 12 : 30;
+    if (checkEvery < 1)
+        checkEvery = 1;
+    if (checkEvery > maxCount)
+        checkEvery = maxCount;
+
     const std::string target = portableTarget(appPath).toStdString();
     const std::string repo = repository.trimmed().toStdString();
     const std::string secret = token.trimmed().toStdString();
-    if (target == m_settings.targetExecutable && repo == m_settings.repositoryUrl && secret == m_settings.token)
+    const bool pathChanged = target != m_settings.targetExecutable || repo != m_settings.repositoryUrl || secret != m_settings.token;
+    const bool scheduleChanged = scheduleEnabled != m_settings.scheduleEnabled || checkEvery != m_settings.checkEvery || unit != m_settings.checkUnit;
+    if (!pathChanged && !scheduleChanged)
         return;
 
     m_settings.targetExecutable = target;
     m_settings.repositoryUrl = repo;
     m_settings.token = secret;
-    m_hasCheck = false;
+    m_settings.scheduleEnabled = scheduleEnabled;
+    m_settings.checkEvery = checkEvery;
+    m_settings.checkUnit = unit;
+    if (pathChanged)
+        m_hasCheck = false;
     if (!m_store.save(m_settings))
         m_model.appendLog(QStringLiteral("Could not write updex.json."));
 
     m_model.setAppPath(QString::fromStdString(m_settings.targetExecutable));
     m_model.setRepository(QString::fromStdString(m_settings.repositoryUrl));
     m_model.setToken(QString::fromStdString(m_settings.token));
-    m_model.setLatestVersion(QStringLiteral("-"));
-    refreshInstalledVersion();
+    m_model.setScheduleEnabled(m_settings.scheduleEnabled);
+    m_model.setCheckEvery(m_settings.checkEvery);
+    m_model.setCheckUnit(QString::fromStdString(m_settings.checkUnit));
+    if (pathChanged) {
+        m_model.setLatestVersion(QStringLiteral("-"));
+        refreshInstalledVersion();
+    }
+    armSchedule();
+    if (scheduleChanged && m_settings.scheduleEnabled) {
+        m_model.appendLog(QStringLiteral("Scheduled check %1. %2")
+                              .arg(schedulePhrase(m_settings), m_model.nextCheck()));
+    } else if (scheduleChanged) {
+        m_model.appendLog(QStringLiteral("Scheduled check is off."));
+    }
+}
+
+void UpdateController::onScheduledCheck()
+{
+    if (!m_settings.scheduleEnabled) {
+        armSchedule();
+        return;
+    }
+
+    const qint64 elapsedMs = m_settings.lastCheckEpoch > 0
+        ? (QDateTime::currentSecsSinceEpoch() - m_settings.lastCheckEpoch) * 1000
+        : scheduleIntervalMs(m_settings);
+    if (elapsedMs < scheduleIntervalMs(m_settings)) {
+        armSchedule();
+        return;
+    }
+
+    if (m_model.busy()) {
+        m_scheduleTimer.start(60 * 1000);
+        const QString when = QDateTime::currentDateTime().addSecs(60).toString(QStringLiteral("HH:mm:ss"));
+        m_model.setNextCheck(QStringLiteral("Next: %1").arg(when));
+        return;
+    }
+    runCheck(true);
 }
 
 void UpdateController::reportProgress(int percent, const std::string &message)
@@ -141,6 +224,8 @@ void UpdateController::runCheck(bool installIfAvailable)
         m_lastCheck = result;
         m_hasCheck = true;
         presentCheck(result);
+        stampLastCheck();
+        armSchedule();
         m_model.setBusy(false);
         if (installIfAvailable && result.canUpdate)
             confirmAndInstall();
@@ -266,6 +351,37 @@ QString UpdateController::portableTarget(const QString &entered) const
     if (QFileInfo(info.absolutePath()).absoluteFilePath().compare(appDir, Qt::CaseInsensitive) == 0)
         return info.fileName();
     return info.absoluteFilePath();
+}
+
+void UpdateController::armSchedule()
+{
+    if (!m_settings.scheduleEnabled) {
+        m_scheduleTimer.stop();
+        m_model.setNextCheck(QStringLiteral("Off"));
+        return;
+    }
+
+    const qint64 intervalMs = scheduleIntervalMs(m_settings);
+    qint64 delayMs = 5000;
+    if (m_settings.lastCheckEpoch > 0) {
+        const qint64 elapsedMs = (QDateTime::currentSecsSinceEpoch() - m_settings.lastCheckEpoch) * 1000;
+        delayMs = intervalMs - elapsedMs;
+        if (delayMs < 1000)
+            delayMs = 1000;
+    }
+    if (delayMs > 2147483647LL)
+        delayMs = 2147483647LL;
+
+    m_scheduleTimer.start(static_cast<int>(delayMs));
+    const QString format = delayMs < 60000 ? QStringLiteral("HH:mm:ss") : QStringLiteral("yyyy-MM-dd HH:mm");
+    m_model.setNextCheck(QStringLiteral("Next: %1").arg(QDateTime::currentDateTime().addMSecs(static_cast<int>(delayMs)).toString(format)));
+}
+
+void UpdateController::stampLastCheck()
+{
+    m_settings.lastCheckEpoch = QDateTime::currentSecsSinceEpoch();
+    if (!m_store.save(m_settings))
+        m_model.appendLog(QStringLiteral("Could not write updex.json."));
 }
 
 std::string UpdateController::resolveExecutable(const UpdaterSettings &settings) const

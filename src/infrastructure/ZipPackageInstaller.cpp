@@ -6,7 +6,7 @@
 #include "infrastructure/ZipPackageInstaller.h"
 
 #include "application/Text.h"
-#include "infrastructure/WinHttpClient.h"
+#include "infrastructure/HttpClient.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -17,12 +17,18 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QThread>
 
+#ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 #include <tlhelp32.h>
+#else
+#include <signal.h>
+#include <unistd.h>
+#endif
 
 #include <vector>
 
@@ -41,14 +47,6 @@ struct RollbackItem
     QString backup;
 };
 
-QString systemTool(const QString &relativePath)
-{
-    BOOL wow64 = FALSE;
-    if (IsWow64Process(GetCurrentProcess(), &wow64) && wow64)
-        return QStringLiteral("C:/Windows/Sysnative/") + relativePath;
-    return relativePath;
-}
-
 QString sanitizeName(QString name)
 {
     for (QChar &c : name) {
@@ -58,6 +56,15 @@ QString sanitizeName(QString name)
     if (name.isEmpty())
         name = QStringLiteral("package");
     return name;
+}
+
+#ifdef Q_OS_WIN
+QString systemTool(const QString &relativePath)
+{
+    BOOL wow64 = FALSE;
+    if (IsWow64Process(GetCurrentProcess(), &wow64) && wow64)
+        return QStringLiteral("C:/Windows/Sysnative/") + relativePath;
+    return relativePath;
 }
 
 int closeProgram(const QString &executablePath)
@@ -110,6 +117,47 @@ void forceCloseByImage(const QString &executablePath)
     QProcess::execute(QStringLiteral("taskkill"),
                       {QStringLiteral("/F"), QStringLiteral("/IM"), QFileInfo(executablePath).fileName()});
 }
+#else
+int closeMatchingProcesses(const QString &executablePath, int signalNumber)
+{
+    const QString target = QFileInfo(executablePath).canonicalFilePath();
+    if (target.isEmpty())
+        return 0;
+
+    int closed = 0;
+    const QStringList entries = QDir(QStringLiteral("/proc")).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString &entry : entries) {
+        bool numeric = false;
+        const int pid = entry.toInt(&numeric);
+        if (!numeric || pid <= 1 || pid == static_cast<int>(::getpid()))
+            continue;
+
+        const QString resolved = QFileInfo(QStringLiteral("/proc/%1/exe").arg(pid)).symLinkTarget();
+        if (resolved.isEmpty())
+            continue;
+        const QString canonical = QFileInfo(resolved).canonicalFilePath();
+        if (canonical != target && resolved != target)
+            continue;
+        if (::kill(pid, signalNumber) == 0)
+            ++closed;
+    }
+    return closed;
+}
+
+int closeProgram(const QString &executablePath)
+{
+    const int closed = closeMatchingProcesses(executablePath, SIGTERM);
+    if (closed > 0)
+        QThread::msleep(400);
+    closeMatchingProcesses(executablePath, SIGKILL);
+    return closed;
+}
+
+void forceCloseByImage(const QString &executablePath)
+{
+    closeMatchingProcesses(executablePath, SIGKILL);
+}
+#endif
 
 bool extractZip(const QString &zipPath, const QString &destination, QString *error)
 {
@@ -132,6 +180,7 @@ bool extractZip(const QString &zipPath, const QString &destination, QString *err
     };
 
     QString stdErr;
+#ifdef Q_OS_WIN
     if (run(systemTool(QStringLiteral("tar.exe")),
             {QStringLiteral("-xf"), QDir::toNativeSeparators(zipPath), QStringLiteral("-C"), QDir::toNativeSeparators(destination)},
             &stdErr)) {
@@ -151,6 +200,25 @@ bool extractZip(const QString &zipPath, const QString &destination, QString *err
     *error = stdErr.isEmpty() ? powerErr : stdErr;
     if (error->isEmpty())
         *error = QStringLiteral("Could not extract the zip. Windows tar and PowerShell both failed.");
+#else
+    if (run(QStringLiteral("unzip"),
+            {QStringLiteral("-o"), zipPath, QStringLiteral("-d"), destination},
+            &stdErr)) {
+        return true;
+    }
+    QString tarErr;
+    if (run(QStringLiteral("bsdtar"),
+            {QStringLiteral("-xf"), zipPath, QStringLiteral("-C"), destination},
+            &tarErr)
+        || run(QStringLiteral("tar"),
+               {QStringLiteral("-xf"), zipPath, QStringLiteral("-C"), destination},
+               &tarErr)) {
+        return true;
+    }
+    *error = stdErr.isEmpty() ? tarErr : stdErr;
+    if (error->isEmpty())
+        *error = QStringLiteral("Could not extract the zip. Install unzip.");
+#endif
     return false;
 }
 
@@ -171,8 +239,15 @@ bool shouldSkip(const QString &relative, const QString &destination, const QStri
         return true;
     if (relative.startsWith(QStringLiteral("updex-backup"), Qt::CaseInsensitive))
         return true;
+    const Qt::CaseSensitivity pathCase =
+#ifdef Q_OS_WIN
+        Qt::CaseInsensitive
+#else
+        Qt::CaseSensitive
+#endif
+        ;
     if (!updaterPath.isEmpty()
-        && QFileInfo(destination).absoluteFilePath().compare(QFileInfo(updaterPath).absoluteFilePath(), Qt::CaseInsensitive) == 0) {
+        && QFileInfo(destination).absoluteFilePath().compare(QFileInfo(updaterPath).absoluteFilePath(), pathCase) == 0) {
         return true;
     }
     return false;
@@ -223,8 +298,9 @@ bool replaceOne(const PlannedFile &file, const QString &backupRoot, std::vector<
         *error = QStringLiteral("Could not copy %1.").arg(file.relative);
         return false;
     }
-    QFile copied(file.destination);
-    copied.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ReadUser | QFile::WriteUser | QFile::ReadGroup | QFile::ReadOther);
+    const QFileDevice::Permissions permissions = QFile::permissions(file.source)
+        | QFile::ReadOwner | QFile::WriteOwner | QFile::ReadUser | QFile::WriteUser | QFile::ReadGroup | QFile::ReadOther;
+    QFile::setPermissions(file.destination, permissions);
     return true;
 }
 
@@ -261,7 +337,7 @@ ApplyUpdateResult ZipPackageInstaller::install(const InstallRequest &request, co
     if (progress)
         progress(0, "Downloading " + request.asset.name);
 
-    const HttpResult downloaded = WinHttpClient().download(
+    const HttpResult downloaded = HttpClient().download(
         request.asset.downloadUrl,
         downloadPath.toStdString(),
         downloadHeaders(request.token),
@@ -319,7 +395,7 @@ ApplyUpdateResult ZipPackageInstaller::install(const InstallRequest &request, co
     if (closed > 0) {
         if (progress)
             progress(78, "Closed " + std::to_string(closed) + " running instance(s).");
-        Sleep(400);
+        QThread::msleep(400);
     }
 
     const QString backupRoot = QDir(appDir).filePath(QStringLiteral("updex-backup/%1")
@@ -332,7 +408,7 @@ ApplyUpdateResult ZipPackageInstaller::install(const InstallRequest &request, co
             if (!triedForceClose) {
                 forceCloseByImage(executable);
                 triedForceClose = true;
-                Sleep(500);
+                QThread::msleep(500);
             }
             error.clear();
             if (!replaceOne(files[static_cast<size_t>(index)], backupRoot, &rollback, &error)) {

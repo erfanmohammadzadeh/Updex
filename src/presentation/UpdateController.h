@@ -11,6 +11,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
 
 class MainWindow;
 
@@ -33,9 +34,12 @@ public:
 private:
     void onCheck();
     void onUpdate();
-    void onSettingsEdited(const QString &appPath, const QString &repository, const QString &token);
+    void onSettingsEdited(const QString &appPath, const QString &repository, const QString &token, bool scheduleEnabled, int checkEvery, const QString &checkUnit);
+    void onScheduledCheck();
     void reportProgress(int percent, const std::string &message);
     void runCheck(bool installIfAvailable);
+    void armSchedule();
+    void stampLastCheck();
     void presentCheck(const UpdateCheckResult &result);
     void confirmAndInstall();
     void runInstall();
@@ -53,4 +57,5 @@ private:
     UpdaterSettings m_settings;
     UpdateCheckResult m_lastCheck;
     bool m_hasCheck = false;
+    QTimer m_scheduleTimer;
 };

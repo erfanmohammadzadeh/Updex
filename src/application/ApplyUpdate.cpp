@@ -10,7 +10,11 @@ std::string normalizedPath(std::string path)
         if (c == '\\')
             c = '/';
     }
+#ifdef UPDEX_OS_WINDOWS
     return toLowerCopy(path);
+#else
+    return path;
+#endif
 }
 }
 
@@ -32,8 +36,13 @@ ApplyUpdateResult ApplyUpdate::execute(const InstallRequest &request, const Inst
     if (request.asset.downloadUrl.empty())
         return {false, "The release asset has no download URL.", 0, {}};
 
-    if (!endsWithCi(request.asset.name, ".zip") && !endsWithCi(request.asset.name, ".exe"))
-        return {false, "The release asset must be a .zip of the program files, or a .exe.", 0, {}};
+    const bool zip = endsWithCi(request.asset.name, ".zip");
+    const bool singleFile = endsWithCi(request.asset.name, ".exe")
+        || endsWithCi(request.asset.name, ".appimage")
+        || endsWithCi(request.asset.name, ".bin")
+        || request.asset.name.find('.') == std::string::npos;
+    if (!zip && !singleFile)
+        return {false, "The release asset must be a .zip of the program files, or a single program file.", 0, {}};
 
     return m_installer.install(request, progress);
 }

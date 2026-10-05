@@ -2,7 +2,7 @@
 
 #include "application/Text.h"
 #include "infrastructure/GitHubRepoParser.h"
-#include "infrastructure/WinHttpClient.h"
+#include "infrastructure/HttpClient.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -53,7 +53,7 @@ ReleaseFetchResult GitHubReleaseRepository::fetchLatest(const std::string &repos
     if (!secret.empty())
         headers.push_back({"Authorization", "Bearer " + secret});
 
-    const HttpResult response = WinHttpClient().get(url.toStdString(), headers);
+    const HttpResult response = HttpClient().get(url.toStdString(), headers);
     if (!response.ok) {
         const QString detail = githubMessage(response.body);
         if (response.status == 404) {

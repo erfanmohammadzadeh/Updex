@@ -21,7 +21,7 @@ public:
 signals:
     void checkRequested();
     void updateRequested();
-    void settingsEdited(const QString &appPath, const QString &repository, const QString &token);
+    void settingsEdited(const QString &appPath, const QString &repository, const QString &token, bool scheduleEnabled, int checkEvery, const QString &checkUnit);
 
 private:
     void refresh();

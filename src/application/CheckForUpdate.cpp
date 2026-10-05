@@ -89,7 +89,7 @@ UpdateCheckResult CheckForUpdate::execute(const UpdaterSettings &settings, const
 
     result.updateAvailable = true;
     if (!asset) {
-        result.message = "Release " + latestText + " is newer, but it has no .zip or .exe asset. Attach a zip of the program files to the GitHub release.";
+        result.message = "Release " + latestText + " is newer, but it has no .zip or program file. Attach a zip of the program files to the GitHub release.";
         return result;
     }
 

@@ -1,4 +1,4 @@
-#include "infrastructure/WinHttpClient.h"
+#include "infrastructure/HttpClient.h"
 
 #include "infrastructure/TextConvert.h"
 
@@ -318,7 +318,7 @@ HttpResult perform(const std::string &url,
 }
 }
 
-HttpResult WinHttpClient::get(const std::string &url, const std::vector<HttpHeader> &headers) const
+HttpResult HttpClient::get(const std::string &url, const std::vector<HttpHeader> &headers) const
 {
     HttpResult result;
     result.body.clear();
@@ -339,7 +339,7 @@ HttpResult WinHttpClient::get(const std::string &url, const std::vector<HttpHead
     return written;
 }
 
-HttpResult WinHttpClient::download(const std::string &url,
+HttpResult HttpClient::download(const std::string &url,
                                    const std::string &destinationPath,
                                    const std::vector<HttpHeader> &headers,
                                    const std::function<void(int percent)> &onProgress) const

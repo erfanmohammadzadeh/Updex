@@ -18,6 +18,10 @@ public:
     QString status() const;
     int progress() const;
     bool busy() const;
+    bool scheduleEnabled() const;
+    int checkEvery() const;
+    QString checkUnit() const;
+    QString nextCheck() const;
 
     void setAppPath(const QString &appPath);
     void setRepository(const QString &repository);
@@ -27,6 +31,10 @@ public:
     void setStatus(const QString &status);
     void setProgress(int progress);
     void setBusy(bool busy);
+    void setScheduleEnabled(bool enabled);
+    void setCheckEvery(int count);
+    void setCheckUnit(const QString &unit);
+    void setNextCheck(const QString &nextCheck);
     void appendLog(const QString &line);
 
 signals:
@@ -42,4 +50,8 @@ private:
     QString m_status = QStringLiteral("Ready");
     int m_progress = 0;
     bool m_busy = false;
+    bool m_scheduleEnabled = false;
+    int m_checkEvery = 1;
+    QString m_checkUnit = QStringLiteral("day");
+    QString m_nextCheck = QStringLiteral("Off");
 };

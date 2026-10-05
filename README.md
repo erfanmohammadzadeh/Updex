@@ -1,16 +1,25 @@
 # Updex
 
-Updex sits beside a Windows program, checks that program’s version against the latest GitHub release, and replaces the exe and the other program files when a newer release is available.
+Updex sits beside a program on Windows or Linux, checks that program’s version against the latest GitHub release, and replaces the program files when a newer release is available.
 
 ## Requirements
 
-- Windows 10 or later
-- Qt 5.15 with qmake (the project kit is Desktop Qt 5.15.2 MinGW 32-bit)
-- A C++17 compiler
+- Qt 5.15 with qmake and a C++17 compiler
+- Windows 10 or later, or Linux
+- On Linux, `unzip` to unpack a release zip
 
-## Build
+## Build on Linux
 
-Open `Updex.pro` in Qt Creator and build the kit above, or from a shell:
+```sh
+qmake Updex.pro
+make
+```
+
+Put the `Updex` binary beside the program. Linux has no Windows file-version resource, so the installed version is read from `version.txt` in that folder. A release asset can be a `.zip`, an AppImage, or a single binary.
+
+## Build on Windows
+
+Open `Updex.pro` in Qt Creator and build Desktop Qt 5.15.2 MinGW 32-bit, or from a shell:
 
 ```bat
 qmake Updex.pro
@@ -22,11 +31,12 @@ Copy `Updex.exe` into the same folder as the program you want to update. Qt Crea
 ## Use
 
 1. Start Updex from the program folder.
-2. Set the program exe. If only one other exe is in the folder, Updex selects it.
+2. Set the program path. If only one other program is in the folder, Updex selects it.
 3. Set the GitHub repository, for example `https://github.com/owner/name`. `owner/name` and `git@github.com:owner/name.git` also work.
 4. Add a token only when the repository is private.
 5. **Check** compares the installed version with the latest GitHub release.
 6. **Update** downloads that release, closes the program if it is running, and copies the new files into the program folder.
+7. Turn on **Check every** and choose a number of days or weeks. The first check runs a few seconds after you enable it. Later checks wait for that full period, including after Updex is restarted. When a scheduled check finds a newer release, Updex asks before replacing files.
 
 Updex writes `updex.json` next to itself. That file is local and is not part of this repository, because it can hold a token.
 
@@ -35,7 +45,11 @@ Updex writes `updex.json` next to itself. That file is local and is not part of 
     "repository": "https://github.com/owner/name",
     "targetExecutable": "Program.exe",
     "token": "",
-    "assetContains": ""
+    "assetContains": "",
+    "scheduleEnabled": false,
+    "checkEvery": 1,
+    "checkUnit": "day",
+    "lastCheckEpoch": 0
 }
 ```
 

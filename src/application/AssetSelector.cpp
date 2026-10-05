@@ -9,11 +9,19 @@ bool isZip(const Asset &asset)
     return endsWithCi(asset.name, ".zip");
 }
 
-bool isExe(const Asset &asset)
+bool isSingleFile(const Asset &asset)
 {
-    return endsWithCi(asset.name, ".exe");
+    if (endsWithCi(asset.name, ".exe") || endsWithCi(asset.name, ".appimage") || endsWithCi(asset.name, ".bin"))
+        return true;
+    return asset.name.find('.') == std::string::npos;
 }
 }
+
+#ifdef UPDEX_OS_WINDOWS
+const char *platformToken = "win";
+#else
+const char *platformToken = "linux";
+#endif
 
 std::optional<Asset> selectReleaseAsset(const std::vector<Asset> &assets,
                                         const std::string &assetContains,
@@ -21,7 +29,7 @@ std::optional<Asset> selectReleaseAsset(const std::vector<Asset> &assets,
 {
     if (!trimmed(assetContains).empty()) {
         for (const Asset &asset : assets) {
-            if (containsCi(asset.name, assetContains) && (isZip(asset) || isExe(asset)))
+            if (containsCi(asset.name, assetContains) && (isZip(asset) || isSingleFile(asset)))
                 return asset;
         }
         return std::nullopt;
@@ -42,14 +50,14 @@ std::optional<Asset> selectReleaseAsset(const std::vector<Asset> &assets,
             }
         }
         for (const Asset &asset : zips) {
-            if (containsCi(asset.name, "win"))
+            if (containsCi(asset.name, platformToken))
                 return asset;
         }
         return zips.front();
     }
 
     for (const Asset &asset : assets) {
-        if (isExe(asset))
+        if (isSingleFile(asset))
             return asset;
     }
     return std::nullopt;

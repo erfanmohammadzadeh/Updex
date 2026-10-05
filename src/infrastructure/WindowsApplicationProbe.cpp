@@ -4,16 +4,18 @@
 #include <QFileInfo>
 #include <QString>
 
+#ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
 #include <winver.h>
-
 #include <vector>
+#endif
 
 namespace
 {
+#ifdef Q_OS_WIN
 bool readFileVersion(const QString &path, Version *version)
 {
     const std::wstring wide = path.toStdWString();
@@ -40,6 +42,7 @@ bool readFileVersion(const QString &path, Version *version)
     version->componentCount = 4;
     return version->major || version->minor || version->patch || version->build;
 }
+#endif
 
 bool readVersionFile(const QString &directory, Version *version)
 {
@@ -66,7 +69,11 @@ InstalledApplication WindowsApplicationProbe::inspect(const std::string &executa
 
     app.executablePath = info.absoluteFilePath().toStdString();
     app.directory = info.absolutePath().toStdString();
-    if (readFileVersion(info.absoluteFilePath(), &app.version) || readVersionFile(info.absolutePath(), &app.version))
+    bool hasFileVersion = false;
+#ifdef Q_OS_WIN
+    hasFileVersion = readFileVersion(info.absoluteFilePath(), &app.version);
+#endif
+    if (hasFileVersion || readVersionFile(info.absolutePath(), &app.version))
         app.hasVersion = true;
     return app;
 }

@@ -18,7 +18,7 @@ struct HttpHeader
     std::string value;
 };
 
-class WinHttpClient
+class HttpClient
 {
 public:
     HttpResult get(const std::string &url, const std::vector<HttpHeader> &headers) const;

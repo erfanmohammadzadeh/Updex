@@ -21,6 +21,9 @@ MainWindow::MainWindow(UpdateModel *model, QWidget *parent)
     connect(ui->lineEditAppExePath, &QLineEdit::editingFinished, this, &MainWindow::publishSettings);
     connect(ui->lineEditRepository, &QLineEdit::editingFinished, this, &MainWindow::publishSettings);
     connect(ui->lineEditToken, &QLineEdit::editingFinished, this, &MainWindow::publishSettings);
+    connect(ui->checkBoxSchedule, &QCheckBox::toggled, this, &MainWindow::publishSettings);
+    connect(ui->spinBoxCheckEvery, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::publishSettings);
+    connect(ui->comboBoxCheckUnit, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::publishSettings);
     connect(ui->pushButtonCheckForUpdate, &QPushButton::clicked, this, [this]() {
         publishSettings();
         emit checkRequested();
@@ -50,14 +53,29 @@ void MainWindow::refresh()
     show(ui->lineEditRepository, m_model->repository());
     show(ui->lineEditToken, m_model->token());
 
+    const int unitIndex = m_model->checkUnit() == QStringLiteral("week") ? 1 : 0;
+    const int maxCount = unitIndex == 1 ? 12 : 30;
+    if (ui->spinBoxCheckEvery->maximum() != maxCount)
+        ui->spinBoxCheckEvery->setMaximum(maxCount);
+    if (!ui->spinBoxCheckEvery->hasFocus() && ui->spinBoxCheckEvery->value() != m_model->checkEvery())
+        ui->spinBoxCheckEvery->setValue(m_model->checkEvery());
+    if (!ui->comboBoxCheckUnit->hasFocus() && ui->comboBoxCheckUnit->currentIndex() != unitIndex)
+        ui->comboBoxCheckUnit->setCurrentIndex(unitIndex);
+    if (ui->checkBoxSchedule->isChecked() != m_model->scheduleEnabled())
+        ui->checkBoxSchedule->setChecked(m_model->scheduleEnabled());
+
     ui->labelInstalledVersionValue->setText(m_model->currentVersion());
     ui->labelLatestVersionValue->setText(m_model->latestVersion());
+    ui->labelNextCheckValue->setText(m_model->nextCheck());
     ui->progressBar->setValue(m_model->progress());
     statusBar()->showMessage(m_model->status());
 
     ui->lineEditAppExePath->setEnabled(!busy);
     ui->lineEditRepository->setEnabled(!busy);
     ui->lineEditToken->setEnabled(!busy);
+    ui->checkBoxSchedule->setEnabled(!busy);
+    ui->spinBoxCheckEvery->setEnabled(!busy && m_model->scheduleEnabled());
+    ui->comboBoxCheckUnit->setEnabled(!busy && m_model->scheduleEnabled());
     ui->pushButtonSetExePath->setEnabled(!busy);
     ui->pushButtonCheckForUpdate->setEnabled(!busy);
     ui->pushButtonUpdate->setEnabled(!busy);
@@ -79,7 +97,10 @@ void MainWindow::publishSettings()
         return;
     emit settingsEdited(ui->lineEditAppExePath->text(),
                         ui->lineEditRepository->text(),
-                        ui->lineEditToken->text());
+                        ui->lineEditToken->text(),
+                        ui->checkBoxSchedule->isChecked(),
+                        ui->spinBoxCheckEvery->value(),
+                        ui->comboBoxCheckUnit->currentIndex() == 1 ? QStringLiteral("week") : QStringLiteral("day"));
 }
 
 void MainWindow::browseForProgram()
@@ -97,7 +118,11 @@ void MainWindow::browseForProgram()
     const QString chosen = QFileDialog::getOpenFileName(this,
                                                         QStringLiteral("Select program"),
                                                         start,
+#ifdef Q_OS_WIN
                                                         QStringLiteral("Programs (*.exe)"));
+#else
+                                                        QStringLiteral("All files (*)"));
+#endif
     if (chosen.isEmpty())
         return;
     ui->lineEditAppExePath->setText(chosen);

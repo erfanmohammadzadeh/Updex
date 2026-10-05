@@ -13,6 +13,10 @@ QString UpdateModel::latestVersion() const { return m_latestVersion; }
 QString UpdateModel::status() const { return m_status; }
 int UpdateModel::progress() const { return m_progress; }
 bool UpdateModel::busy() const { return m_busy; }
+bool UpdateModel::scheduleEnabled() const { return m_scheduleEnabled; }
+int UpdateModel::checkEvery() const { return m_checkEvery; }
+QString UpdateModel::checkUnit() const { return m_checkUnit; }
+QString UpdateModel::nextCheck() const { return m_nextCheck; }
 
 void UpdateModel::setAppPath(const QString &appPath)
 {
@@ -75,6 +79,38 @@ void UpdateModel::setBusy(bool busy)
     if (m_busy == busy)
         return;
     m_busy = busy;
+    emit changed();
+}
+
+void UpdateModel::setScheduleEnabled(bool enabled)
+{
+    if (m_scheduleEnabled == enabled)
+        return;
+    m_scheduleEnabled = enabled;
+    emit changed();
+}
+
+void UpdateModel::setCheckEvery(int count)
+{
+    if (m_checkEvery == count)
+        return;
+    m_checkEvery = count;
+    emit changed();
+}
+
+void UpdateModel::setCheckUnit(const QString &unit)
+{
+    if (m_checkUnit == unit)
+        return;
+    m_checkUnit = unit;
+    emit changed();
+}
+
+void UpdateModel::setNextCheck(const QString &nextCheck)
+{
+    if (m_nextCheck == nextCheck)
+        return;
+    m_nextCheck = nextCheck;
     emit changed();
 }
 
