@@ -1,0 +1,42 @@
+# Qt / qmake
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.autosave
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+Makefile
+Makefile.*
+.qmake.stash
+object_script.*
+*_plugin_import.cpp
+
+# Build output
+build/
+build-*/
+debug/
+release/
+*.o
+*.obj
+*.exe
+*.dll
+*.a
+*.lib
+*.so
+*.pdb
+*.ilk
+*.exp
+
+# Local updater config. It can contain a GitHub token.
+updex.json
+updex-backup/
+
+# Editors and OS
+.vs/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
